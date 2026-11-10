@@ -1,0 +1,56 @@
+[
+  {
+    "upstream_repo": "domokane/FinancePy",
+    "head_sha": "0b0dc17ab3bcdaa0a21ae73b734f2641c9e5cf41",
+    "file": "financepy/utils/date.py",
+    "function": "add_days",
+    "native_test_cmd": "python3 -m pytest tests/unit/test_date.py -q",
+    "bench_cmd": "python3 osspr-intake/harness/bench_add_days.py",
+    "baseline_median_ms": 1462.5,
+    "baseline_noise_pct": 19.1,
+    "tests_pass_on_baseline": true,
+    "workload": "Walk every calendar day from 1990-01-01 to 2070-01-01 by calling add_days(1), thirty times. That is the inner step of date_range(..., '1D') and of daily schedule generation.",
+    "notes": "add_days is about 95% of the walk. For a scalar step it returns Date.from_excel(self.excel_dt + n). from_excel splits off a zero time-of-day and then Date.__init__ re-validates the month and recomputes the Excel serial that was just supplied; that reconstruction is about three quarters of the walk. Whole-day steps can return Date._make_fast from ymd_from_excel, which this file already uses for IMM dates, and leave a fractional serial on the current path so intraday dates stay identical. baseline_noise_pct is (max-min)/median across 7 process runs. Checksum of day numbers was 459620 on every run."
+  },
+  {
+    "upstream_repo": "domokane/FinancePy",
+    "head_sha": "0b0dc17ab3bcdaa0a21ae73b734f2641c9e5cf41",
+    "file": "financepy/utils/calendar.py",
+    "function": "holiday_target",
+    "native_test_cmd": "python3 -m pytest tests/unit/test_calendar.py::test_target_additional_closing_days tests/unit/test_calendar.py::test_get_holiday_list_contains_only_holidays -q",
+    "bench_cmd": "python3 osspr-intake/harness/bench_holiday_target.py",
+    "baseline_median_ms": 1206.7,
+    "baseline_noise_pct": 20.3,
+    "tests_pass_on_baseline": true,
+    "workload": "Mark each weekday from 2000-01-03 through 2040-01-02 (10,435 dates, built before the timer) as a TARGET business day via is_business_day, twenty times. EUR swap schedules and get_holiday_list do this.",
+    "notes": "holiday_target is about three quarters of that scan. Every call builds Easter Monday through easter_monday (a new Date) and add_days(-3) (another Date) only to compare them with dt. The Easter Monday Excel serial is a year-indexed table plus a day offset. Cache that serial on the calendar and compare dt.excel_dt with the cached Good Friday and Easter Monday serials; the fixed month/day holidays stay as they are, so the booleans do not change. baseline_noise_pct is (max-min)/median across 7 process runs. Every run counted 194 holidays."
+  },
+  {
+    "upstream_repo": "domokane/FinancePy",
+    "head_sha": "0b0dc17ab3bcdaa0a21ae73b734f2641c9e5cf41",
+    "file": "financepy/products/bonds/bond.py",
+    "function": "dirty_price_from_discount_curve",
+    "native_test_cmd": "python3 -m pytest tests/unit/test_model_rates_bdt.py::test_bdt_example_two -q",
+    "bench_cmd": "python3 osspr-intake/harness/bench_bond_dirty_price.py",
+    "baseline_median_ms": 1164.9,
+    "baseline_noise_pct": 13.8,
+    "tests_pass_on_baseline": true,
+    "workload": "Dirty-price 150 fixed-coupon US bonds (maturities 2027-2056, five coupons) off one 40-year flat-forward discount curve, forty times. Curve and bonds are built before the timer.",
+    "notes": "The timed section is entirely dirty_price_from_discount_curve, and about 87% of it is one DiscountCurve.df call per remaining cashflow. Each scalar df rebuilds a one-element time array and re-wraps the knot arrays inside interpolate. df already accepts a list of dates and, on this curve, a single vector call per bond reproduced the scalar dirty price to 1e-14. Keep the ex-dividend and redemption rules in the cashflow loop and discount the resulting flows in one call. The native test prices a coupon bond off a discount curve to 4 decimals via clean_price_from_discount_curve. baseline_noise_pct is (max-min)/median across 7 process runs. The price checksum was identical on every run."
+  },
+  {
+    "upstream_repo": "domokane/FinancePy",
+    "head_sha": "0b0dc17ab3bcdaa0a21ae73b734f2641c9e5cf41",
+    "file": "financepy/products/equity/equity_binomial_tree.py",
+    "function": "_value_once",
+    "native_test_cmd": "python3 -m pytest tests/unit/test_equity_binomial_tree.py -q",
+    "metric_kind": "peak_memory_bytes",
+    "baseline_value": 72179712,
+    "baseline_noise_pct": 0.1,
+    "metric_benchmark": "python3 osspr-intake/harness/bench_binomial_peak_mem.py",
+    "labeled_data": null,
+    "tests_pass_on_baseline": true,
+    "workload": "Price one 1-year American put (spot 100, strike 100, vol 20%, r 5%, q 2%) with EquityBinomialTree.value at 3000 steps. value calls _value_once at 3000 and 3001 steps. A 32-step call warms numba first; the metric is the steady-state pricing call, not compile time.",
+    "notes": "The metric is the increase in Linux ru_maxrss, in bytes, across that pricing call. _value_once allocates stock_values and option_values of length n(n+1)/2. For the larger call (3001 steps) those two float64 grids are 72,120,048 bytes, which is 99.9% of the measured high-water increase. Delta, gamma, and theta only read the nodes on the first two time layers, so backward induction can keep two length-(n+1) layers and recompute those stock prices from the CRR formula. The unit tests compare price, delta, gamma, and theta after rounding to 3 decimals. baseline_noise_pct is (max-min)/median across 7 process runs. The reported price was 6.6682007897 on every run."
+  }
+]
